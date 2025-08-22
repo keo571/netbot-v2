@@ -1,13 +1,8 @@
-AI Architecture
+# AI Architecture: Hybrid RAG System
 
-[[RAG]]
-[[Projects/RAG/GraphRAG/GraphRAG|GraphRAG]]
-[[Hybrid RAG Architecture]]
-[[diagram-to-graph Architecture]]
+## Executive Summary
 
-> [!summary] Executive Summary
-
-> This architecture outlines a sophisticated Hybrid Retrieval-Augmented Generation (RAG) system designed to power a chatbot from a corpus of Microsoft Word documents. The core innovation lies in its **context-aware retrieval mechanism**: the system first identifies relevant text passages using a vector database and then uses metadata links to retrieve associated flowchart data from a graph database. This approach directly leverages the existing `diagram-to-graph` pipeline for all visual processing.
+This architecture outlines a sophisticated Hybrid Retrieval-Augmented Generation (RAG) system designed to power a chatbot from a corpus of Microsoft Word documents. The core innovation lies in its **context-aware retrieval mechanism**: the system first identifies relevant text passages using a vector database and then uses metadata links to retrieve associated flowchart data from a graph database. This approach directly leverages the existing `diagram-to-graph` pipeline for all visual processing.
 
 ## Core Architectural Principles
 
@@ -21,15 +16,14 @@ AI Architecture
 
 The system is best understood as two distinct flows:
 
-**[[#1. Ingestion Flow: Building the Knowledge Base]]**: A one-time process to build the knowledge base.
-**[[#2. Query Flow: Answering User Questions]]**: A real-time flow to answer user questions.
+**[1. Ingestion Flow: Building the Knowledge Base](#1-ingestion-flow-building-the-knowledge-base)**: A one-time process to build the knowledge base.
+**[2. Query Flow: Answering User Questions](#2-query-flow-answering-user-questions)**: A real-time flow to answer user questions.
 
 ## 1. Ingestion Flow: Building the Knowledge Base
 
 This flow processes the corpus of Word documents and populates the Vector and Graph databases.
 
 ```mermaid
-
 graph TD
 subgraph "📚 Document Corpus"
 DOC["Word Documents (.docx)"]
@@ -58,9 +52,9 @@ D -- "Structured Graph Data + ID" --> GDB
 
 ### Component Breakdown (Ingestion)
 
-> [!info]
+### 💡 Key Component
 
-> The most critical new component in this flow is the **Content Extractor & Linker**, which creates the metadata bridge between text and diagrams.
+The most critical new component in this flow is the **Content Extractor & Linker**, which creates the metadata bridge between text and diagrams.
 
 1. **Word Document Parser**:
 	* **Technology**: `python-docx` library.
@@ -73,8 +67,8 @@ D -- "Structured Graph Data + ID" --> GDB
 		2. When an image is found, generate a `unique_diagram_id`.
 		3. **Context Capture**: Extract text paragraphs immediately *before* and *after* the image.
 		4. **Metadata Assignment**: Tag these captured paragraphs with the `unique_diagram_id`.
-		5. Pass the image data and its ID to the [[#Image Processor]].
-		6. Pass all text paragraphs to the [[#Text Chunking & Embedding]].
+		5. Pass the image data and its ID to the [Image Processor](#4-image-processor).
+		6. Pass all text paragraphs to the [Text Chunking & Embedding](#3-text-chunking--embedding).
 
 3. **Text Chunking & Embedding**:
 	* **Technology**: LangChain/LlamaIndex for chunking, Google `text-embedding-004` for embeddings.
@@ -199,23 +193,24 @@ Synthesize a clear, step-by-step answer.
 
 5. **Mermaid Generation**:
 
-> [!note] This is a deterministic, non-AI component.
+### 📝 Note
+
+This is a deterministic, non-AI component.
 
 * If the context object contains graph data, this component takes the structured list of nodes and relationships and formats it into a Mermaid markdown string. This happens in parallel to the LLM synthesis to ensure a syntactically perfect diagram is always generated.
 
 ---
 ## Graph Database Best Practices
 
-> [!tip] Best Practice: Multi-Graph Storage in a Single Database
+### 💡 Best Practice: Multi-Graph Storage in a Single Database
 
-> For this use case, the best practice is to store all diagrams as logically separate subgraphs within a **single Neo4j database**. This avoids the operational overhead and query complexity of managing multiple databases, a feature typically reserved for Neo4j Enterprise Edition for multi-tenancy.
+For this use case, the best practice is to store all diagrams as logically separate subgraphs within a **single Neo4j database**. This avoids the operational overhead and query complexity of managing multiple databases, a feature typically reserved for Neo4j Enterprise Edition for multi-tenancy.
 
 ### The `diagram_id` Partitioning Pattern
 
 The key to managing multiple graphs is adding a `diagram_id` property to every node and relationship that belongs to a specific diagram. This partitions the data logically.
 
 ```mermaid
-
 graph TD;
 
 subgraph "Single Neo4j Database";
@@ -270,8 +265,6 @@ RETURN n, r, m
 This approach is scalable, performant, and maintains the contextual link between your text and your diagrams perfectly.
 
 ---
-## Conclusion
+## ✅ Conclusion
 
-> [!success]
-
-> This architecture provides a robust and practical solution by creating a clear, two-stage retrieval process that honors the relationship between text and diagrams in your source documents. By integrating your existing `diagram-to-graph` pipeline, we minimize new development and build upon a proven foundation. The result is a chatbot that doesn't just find information—it understands and presents it in the most effective format, combining textual explanation with clear visual workflows.
+This architecture provides a robust and practical solution by creating a clear, two-stage retrieval process that honors the relationship between text and diagrams in your source documents. By integrating your existing `diagram-to-graph` pipeline, we minimize new development and build upon a proven foundation. The result is a chatbot that doesn't just find information—it understands and presents it in the most effective format, combining textual explanation with clear visual workflows.
