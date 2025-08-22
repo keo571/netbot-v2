@@ -89,7 +89,7 @@ setup(
     include_package_data=True,
     author="NetBot Team",
     author_email="team@netbot.ai",
-    url="https://github.com/qiyao/netbot-v2",
+    url="https://github.com/keo571/netbot-v2",
     license="MIT",
     classifiers=[
         "Development Status :: 4 - Beta",
