@@ -124,8 +124,7 @@ netbot = NetBot()
 # Process diagram
 result = netbot.process_diagram(
     image_path="data/examples/network_diagram.png",
-    output_dir="data/processed",
-    force_reprocess=False
+    output_dir="data/processed"
 )
 
 if result['status'] == 'success':

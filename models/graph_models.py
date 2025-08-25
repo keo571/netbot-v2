@@ -31,7 +31,6 @@ class GraphRelationship:
     type: str
     diagram_id: str
     properties: Dict[str, Any] = field(default_factory=dict)
-    embedding: Optional[np.ndarray] = None
 
 
 @dataclass

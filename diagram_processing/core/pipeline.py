@@ -85,7 +85,8 @@ class KnowledgeGraphPipeline:
             return {'status': 'error', 'message': 'Failed to generate graph data from Gemini'}
         
         # Phase 3: Export
-        nodes_file, rels_file = self.exporter.generate_csv_files(nodes, relationships, output_dir, image_path)
+        # Use diagram_id for folder name instead of temp image path
+        nodes_file, rels_file = self.exporter.generate_csv_files(nodes, relationships, output_dir, diagram_id)
         
         # Neo4j storage
         neo4j_success = False
@@ -95,6 +96,7 @@ class KnowledgeGraphPipeline:
         # Prepare full results for return (includes all data for programmatic access)
         result = {
             'status': 'success',
+            'diagram_id': diagram_id,
             'diagram_type': preprocessed['diagram_type'],
             'total_elements': preprocessed['total_text_elements'],
             'total_shapes': preprocessed['total_shapes'],
@@ -112,8 +114,8 @@ class KnowledgeGraphPipeline:
         }
         
         # Save lightweight metadata file (no duplicate data, only unique insights)
-        folder_name = os.path.splitext(os.path.basename(image_path))[0]
-        results_output_dir = os.path.join(output_dir, folder_name)
+        # Use diagram_id for consistent folder naming
+        results_output_dir = os.path.join(output_dir, diagram_id)
         results_file = os.path.join(results_output_dir, 'pipeline_metadata.json')
         os.makedirs(results_output_dir, exist_ok=True)
         

@@ -268,16 +268,7 @@ class GraphRAG:
         if not graph_data.get("nodes"):
             return {"error": "No nodes found for visualization"}
         
-        # Step 2: Generate visualization
-        if not output_path:
-            # Use hash of query to create short, unique filename
-            query_hash = hashlib.md5(natural_query.encode()).hexdigest()[:8]
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_path = f"data/visualizations/{diagram_id}_subgraph_{query_hash}_{timestamp}.png"
-        
-        # Ensure output directory exists
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        
+        # Step 2: Generate visualization as base64 (no file saving)
         self._ensure_visualizer_initialized()
         
         # Generate visualization based on backend
@@ -287,28 +278,17 @@ class GraphRAG:
         if not layout:
             layout = "dot" if backend == "graphviz" else "spring"
         
-        if backend == "graphviz":
-            image_path = self._visualizer.generate_image(
-                graph_data["nodes"], 
-                graph_data["relationships"], 
-                output_path.replace('.png', ''),
-                layout=layout,
-                show_node_properties=show_node_properties,
-                show_edge_properties=show_edge_properties
-            )
-        else:  # NetworkX
-            image_path = self._visualizer.generate_image(
-                graph_data["nodes"], 
-                graph_data["relationships"], 
-                output_path,
-                layout=layout,
-                show_node_properties=show_node_properties,
-                show_edge_properties=show_edge_properties
-            )
-        
+        # Generate base64 image data directly
+        image_base64 = self._visualizer.generate_image_base64(
+            graph_data["nodes"], 
+            graph_data["relationships"], 
+            layout=layout,
+            show_node_properties=show_node_properties,
+            show_edge_properties=show_edge_properties
+        )
         
         # Check for visualization failure
-        if not image_path:
+        if not image_base64:
             return {**graph_data, "error": "Failed to generate graph image"}
         
         # Step 3: Generate explanation
@@ -332,7 +312,7 @@ class GraphRAG:
         result = {
             "nodes": graph_data["nodes"],
             "relationships": graph_data["relationships"],
-            "image_path": image_path,
+            "image_path": image_base64,  # Now contains base64 data instead of file path
             "explanation": explanation,
             "method": graph_data.get("method", method)
         }
@@ -447,45 +427,30 @@ class GraphRAG:
         """Create simple explanation prompt."""
         prompts = {
             'network': f"""
-            Explain this network diagram subgraph in simple terms:
-            
             Query: "{query}"
             
-            Network components:
-            {elements_text}
+            Components: {elements_text}
+            Connections: {relationships_text}
             
-            Network connections:
-            {relationships_text}
-            
-            Provide a clear, concise explanation of the network topology and why it's relevant to the query.
+            Provide a brief explanation (3-4 sentences) of what this network shows and how it relates to the query.
             """,
             
             'flowchart': f"""
-            Explain this process flowchart in simple terms:
-            
             Query: "{query}"
             
-            Process steps:
-            {elements_text}
+            Steps: {elements_text}
+            Flow: {relationships_text}
             
-            Process flow:
-            {relationships_text}
-            
-            Provide a clear, concise explanation of the workflow and why it's relevant to the query.
+            Provide a brief explanation (3-4 sentences) of what this process shows and how it relates to the query.
             """,
             
             'mixed': f"""
-            Explain this diagram in simple terms:
-            
             Query: "{query}"
             
-            Elements:
-            {elements_text}
+            Elements: {elements_text}
+            Relationships: {relationships_text}
             
-            Relationships:
-            {relationships_text}
-            
-            Provide a clear, concise explanation of what this shows and why it's relevant to the query.
+            Provide a brief explanation (3-4 sentences) of what this diagram shows and how it relates to the query.
             """
         }
         

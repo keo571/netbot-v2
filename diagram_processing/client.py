@@ -12,7 +12,6 @@ import os
 from typing import Dict, List
 from dotenv import load_dotenv
 
-import json
 from pathlib import Path
 from .core.pipeline import KnowledgeGraphPipeline
 
@@ -86,14 +85,13 @@ class DiagramProcessor:
             force_reprocess=force_reprocess
         )
     
-    def batch_process(self, input_dir: str, output_dir: str = "data/processed/batch", 
-                     store_neo4j: bool = True, file_extensions: List[str] = None) -> Dict:
+    def batch_process(self, input_dir: str, store_neo4j: bool = True, 
+                     file_extensions: List[str] = None) -> Dict:
         """
         Process multiple diagram images in a directory.
         
         Args:
             input_dir: Directory containing diagram images
-            output_dir: Directory to save batch results
             store_neo4j: Whether to store in Neo4j database
             file_extensions: List of file extensions to process (default: ['.png', '.jpg', '.jpeg'])
             
@@ -105,7 +103,6 @@ class DiagramProcessor:
         
         print(f"Starting batch processing...")
         print(f"Input: {input_dir}")
-        print(f"Output: {output_dir}")
         
         # Find image files
         image_files = self._find_image_files(input_dir, file_extensions)
@@ -143,8 +140,7 @@ class DiagramProcessor:
                 result = self.process_diagram(
                     str(image_file), 
                     diagram_id,
-                    output_dir,
-                    store_neo4j
+                    store_neo4j=store_neo4j
                 )
                 
                 if result['status'] == 'success':
@@ -171,18 +167,9 @@ class DiagramProcessor:
                 batch_results['failed'] += 1
                 print(f"Failed: {str(e)}")
         
-        # Save batch results summary
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
-        
-        batch_results_file = output_path / 'batch_results.json'
-        with open(batch_results_file, 'w') as f:
-            json.dump(batch_results, f, indent=2, default=str)
-        
         print(f"\n✅ Batch processing complete!")
         print(f"📊 Results: {batch_results['successful']} successful, {batch_results['failed']} failed, {batch_results['skipped']} skipped")
         print(f"📈 Generated: {batch_results['total_nodes']} nodes, {batch_results['total_relationships']} relationships")
-        print(f"💾 Summary saved to: {batch_results_file}")
         
         return batch_results
     

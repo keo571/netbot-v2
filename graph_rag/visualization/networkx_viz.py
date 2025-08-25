@@ -97,6 +97,77 @@ class NetworkXVisualizer(BaseVisualizer, PropertySummaryMixin):
         self._create_visualization(nodes, relationships, layout, show_node_properties, 
                                  show_edge_properties, output_path=None)
     
+    def generate_image_base64(self, nodes: List[GraphNode], relationships: List[GraphRelationship], 
+                             layout: str = "spring", show_node_properties: bool = True, 
+                             show_edge_properties: bool = True) -> str:
+        """Generate a graph image as base64 string without saving file.
+        
+        Args:
+            nodes: List of nodes to visualize
+            relationships: List of relationships to visualize
+            layout: Layout algorithm ('spring', 'circular', 'shell', 'kamada_kawai', 'random')
+            show_node_properties: Whether to show node properties in labels
+            show_edge_properties: Whether to show edge properties in labels
+            
+        Returns:
+            Base64-encoded PNG image data, or empty string if failed
+        """
+        if not self.is_available():
+            print(f"❌ NetworkX backend not available: {getattr(self, '_import_error', 'Unknown error')}")
+            return ""
+        
+        try:
+            import base64
+            import io
+            
+            # Prepare graph data
+            G, node_colors, node_labels, edge_labels, edges_added = self._prepare_graph(
+                nodes, relationships, show_node_properties, show_edge_properties
+            )
+            
+            if len(G.nodes) == 0:
+                print("❌ No valid nodes to visualize")
+                return ""
+            
+            # Create figure
+            fig, ax = plt.subplots(figsize=(12, 8))
+            
+            # Setup plot
+            self._configure_plot(nodes, show_node_properties, show_edge_properties)
+            
+            # Calculate layout positions  
+            pos = self._get_layout(G, layout)
+            
+            # Get drawing parameters
+            params = self._get_drawing_parameters(show_node_properties, show_edge_properties)
+            
+            # Draw graph elements
+            self._draw_graph_elements(G, pos, node_colors, node_labels, edge_labels, params)
+            
+            # Add legend
+            legend_elements = self._create_legend(nodes)
+            if legend_elements:
+                ax.legend(handles=legend_elements, loc='upper right')
+            
+            ax.axis('off')
+            fig.tight_layout()
+            
+            # Save to bytes buffer
+            img_buffer = io.BytesIO()
+            fig.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
+            plt.close(fig)  # Clean up
+            
+            # Convert to base64
+            img_buffer.seek(0)
+            base64_data = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
+            img_buffer.close()
+            
+            return f"data:image/png;base64,{base64_data}"  # NetworkX uses matplotlib, so PNG only
+            
+        except Exception as e:
+            print(f"❌ Error generating NetworkX base64 image: {e}")
+            return ""
+    
     # ========== Core Visualization Logic ==========
     
     def _create_visualization(self, nodes: List[GraphNode], relationships: List[GraphRelationship],

@@ -105,7 +105,7 @@ class KnowledgeGraphExporter:
             return False
     
     def generate_csv_files(self, nodes: List[GraphNode], relationships: List[GraphRelationship], 
-                          output_dir: str = "output", image_name: Optional[str] = None) -> Tuple[str, str]:
+                          output_dir: str = "output", subfolder_name: Optional[str] = None) -> Tuple[str, str]:
         """
         Generate CSV files for nodes and relationships.
         
@@ -113,25 +113,24 @@ class KnowledgeGraphExporter:
             nodes: List of graph nodes to export
             relationships: List of graph relationships to export
             output_dir: Base output directory
-            image_name: Optional image name for creating subfolder
+            subfolder_name: Optional subfolder name (usually diagram_id)
             
         Returns:
             Tuple of (nodes_file_path, relationships_file_path)
         """
         print("Phase 3: Generating CSV files...")
         
-        final_output_dir = self._prepare_output_directory(output_dir, image_name)
+        final_output_dir = self._prepare_output_directory(output_dir, subfolder_name)
         
         nodes_file = self._generate_nodes_csv(nodes, final_output_dir)
         relationships_file = self._generate_relationships_csv(relationships, final_output_dir)
         
         return nodes_file, relationships_file
     
-    def _prepare_output_directory(self, output_dir: str, image_name: Optional[str]) -> str:
-        """Prepare the output directory, creating subfolder if image name provided."""
-        if image_name:
-            folder_name = os.path.splitext(os.path.basename(image_name))[0]
-            final_output_dir = os.path.join(output_dir, folder_name)
+    def _prepare_output_directory(self, output_dir: str, subfolder_name: Optional[str]) -> str:
+        """Prepare the output directory, creating subfolder if name provided."""
+        if subfolder_name:
+            final_output_dir = os.path.join(output_dir, subfolder_name)
         else:
             final_output_dir = output_dir
             

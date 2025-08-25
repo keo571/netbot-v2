@@ -108,6 +108,52 @@ class GraphvizVisualizer(BaseVisualizer, PropertySummaryMixin):
                 print(f"❌ Full traceback: {traceback.format_exc()}")
             return ""
     
+    def generate_image_base64(self, nodes: List[GraphNode], relationships: List[GraphRelationship], 
+                             format: str = "svg", layout: str = "dot", 
+                             show_node_properties: bool = True, 
+                             show_edge_properties: bool = True) -> str:
+        """Generate a graph image as base64 string without saving file.
+        
+        Args:
+            nodes: List of nodes to visualize
+            relationships: List of relationships to visualize  
+            format: Output format ('svg', 'png', 'pdf', 'ps') - defaults to SVG for performance
+            layout: Graphviz layout engine ('dot', 'neato', 'fdp', 'circo', 'twopi')
+            show_node_properties: Whether to show node properties in labels
+            show_edge_properties: Whether to show edge properties in labels
+            
+        Returns:
+            Base64-encoded image data, or empty string if failed
+        """
+        if not self.is_available():
+            print(f"❌ Graphviz backend not available: {getattr(self, '_import_error', 'Unknown error')}")
+            return ""
+        
+        try:
+            import base64
+            
+            # Create Graphviz graph
+            dot = self._create_graph(nodes, relationships, layout, 
+                                   show_node_properties, show_edge_properties)
+            
+            # Generate SVG data directly in memory (much faster than PNG)
+            image_data = dot.pipe(format=format)
+            
+            # Convert to base64
+            base64_data = base64.b64encode(image_data).decode('utf-8')
+            
+            # Use proper MIME type for SVG
+            if format == "svg":
+                return f"data:image/svg+xml;base64,{base64_data}"
+            else:
+                return f"data:image/{format};base64,{base64_data}"
+            
+        except Exception as e:
+            print(f"❌ Error generating Graphviz base64 image: {e}")
+            if traceback:
+                print(f"❌ Full traceback: {traceback.format_exc()}")
+            return ""
+    
     def generate_dot_source(self, nodes: List[GraphNode], relationships: List[GraphRelationship],
                            layout: str = "dot", show_node_properties: bool = True,
                            show_edge_properties: bool = True) -> str:

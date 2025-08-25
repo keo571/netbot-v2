@@ -16,21 +16,44 @@ class EmbeddingsNotFoundError(Exception):
     pass
 
 
+class VectorSearchCache:
+    """Global cache for VectorSearch components"""
+    _embedding_encoder = None
+    _embedding_caches = {}  # diagram_id -> EmbeddingCache
+    
+    @classmethod
+    def get_embedding_encoder(cls):
+        """Get or create cached embedding encoder"""
+        if cls._embedding_encoder is None:
+            try:
+                cls._embedding_encoder = EmbeddingEncoder()
+                print(f"✅ VectorSearch: Cached EmbeddingEncoder initialized")
+            except Exception as e:
+                print(f"❌ VectorSearch: Failed to initialize EmbeddingEncoder: {e}")
+                import traceback
+                traceback.print_exc()
+                cls._embedding_encoder = None
+        return cls._embedding_encoder
+    
+    @classmethod
+    def get_embedding_cache(cls, data_access, cache_key):
+        """Get or create cached embedding cache"""
+        if cache_key not in cls._embedding_caches:
+            cls._embedding_caches[cache_key] = EmbeddingCache(data_access)
+        return cls._embedding_caches[cache_key]
+
+
 class VectorSearch:
     """Handles vector similarity search operations - pure query engine"""
     
     def __init__(self, data_access, gemini_api_key=None):
         self.data_access = data_access
         self.gemini_api_key = gemini_api_key
-        try:
-            self.embedding_encoder = EmbeddingEncoder()
-            print(f"✅ VectorSearch: EmbeddingEncoder initialized successfully")
-        except Exception as e:
-            print(f"❌ VectorSearch: Failed to initialize EmbeddingEncoder: {e}")
-            import traceback
-            traceback.print_exc()
-            self.embedding_encoder = None
-        self.cache = EmbeddingCache(data_access)
+        # Use cached encoder instead of creating new one
+        self.embedding_encoder = VectorSearchCache.get_embedding_encoder()
+        # Use cached embedding cache
+        cache_key = f"{id(data_access)}"  # Use data_access instance as cache key
+        self.cache = VectorSearchCache.get_embedding_cache(data_access, cache_key)
     
     def cosine_similarity_vectorized(self, query_embedding: np.ndarray, embedding_matrix: np.ndarray) -> np.ndarray:
         """Calculate cosine similarity between query and multiple embeddings efficiently"""

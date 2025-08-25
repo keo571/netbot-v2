@@ -94,10 +94,6 @@ class NetBot:
             
             # Extract the diagram_id from the processing result
             diagram_id = process_result.get('diagram_id')
-            if not diagram_id:
-                # Fallback: generate from filename
-                import os
-                diagram_id = os.path.splitext(os.path.basename(image_path))[0]
             
             print(f"✅ Processed: {len(process_result.get('nodes', []))} nodes, {len(process_result.get('relationships', []))} relationships")
             print(f"📝 Using diagram_id: {diagram_id}")
@@ -138,6 +134,7 @@ class NetBot:
             return {"error": f"Quickstart workflow failed: {str(e)}"}
     
     def process_diagram(self, image_path: str, 
+                       diagram_id: str = None,
                        output_dir: str = "data/processed", 
                        force_reprocess: bool = False) -> Dict[str, Any]:
         """
@@ -145,15 +142,17 @@ class NetBot:
         
         Args:
             image_path: Path to diagram image
+            diagram_id: Optional diagram ID (auto-generated from filename if not provided)
             output_dir: Output directory for processed files
             force_reprocess: If True, reprocess even if diagram exists in Neo4j
             
         Returns:
             Dict with processing results or error information
         """
-        # Auto-generate diagram_id from filename
-        import os
-        diagram_id = os.path.splitext(os.path.basename(image_path))[0]
+        # Auto-generate diagram_id from filename only if not provided
+        if not diagram_id:
+            import os
+            diagram_id = os.path.splitext(os.path.basename(image_path))[0].lower()
         
         processor = DiagramProcessor(
             gemini_api_key=self.gemini_api_key,
@@ -223,7 +222,7 @@ class NetBot:
     
     def query_and_visualize(self, query: str, diagram_id: str, 
                            backend: str = "graphviz", layout: str = None,
-                           output_path: str = None, include_explanation: bool = False,
+                           output_path: str = None, explanation_detail: str = "basic",
                            **kwargs) -> Dict[str, Any]:
         """
         Search and create visualization with explanation.
@@ -234,7 +233,7 @@ class NetBot:
             backend: Visualization backend ("graphviz" or "networkx")
             layout: Layout algorithm (backend-specific)
             output_path: Custom output path for image
-            include_explanation: Generate AI explanation
+            explanation_detail: Explanation level - "none", "basic", or "detailed"
             **kwargs: Additional visualization options
             
         Returns:
@@ -248,6 +247,10 @@ class NetBot:
         )
         
         try:
+            # Convert explanation_detail to the parameters expected by GraphRAG
+            include_explanation = explanation_detail != "none"
+            detailed_explanation = explanation_detail == "detailed"
+            
             return rag.query_and_visualize(
                 natural_query=query,
                 diagram_id=diagram_id,
@@ -255,10 +258,21 @@ class NetBot:
                 layout=layout,
                 output_path=output_path,
                 include_explanation=include_explanation,
+                detailed_explanation=detailed_explanation,
                 **kwargs
             )
         finally:
             rag.close()
+    
+    def get_graph_rag(self):
+        """Get a GraphRAG instance for advanced operations"""
+        from graph_rag import GraphRAG
+        return GraphRAG(
+            neo4j_uri=self.neo4j_uri,
+            neo4j_user=self.neo4j_user,
+            neo4j_password=self.neo4j_password,
+            gemini_api_key=self.gemini_api_key
+        )
     
     # Bulk Operations - Orchestration of module-specific bulk functionality
     
@@ -353,7 +367,6 @@ class NetBot:
                 # Use existing batch processing capability
                 batch_results = processor.batch_process(
                     input_dir=image_directory,
-                    output_dir="data/processed",
                     store_neo4j=True
                 )
                 

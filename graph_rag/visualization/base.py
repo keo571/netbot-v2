@@ -199,6 +199,21 @@ class BaseVisualizer(ABC):
         raise NotImplementedError("Subclasses must implement generate_image()")
     
     @abstractmethod
+    def generate_image_base64(self, nodes: List[GraphNode], relationships: List[GraphRelationship], 
+                             **kwargs) -> str:
+        """Generate graph visualization as base64 string without saving file.
+        
+        Args:
+            nodes: List of nodes to visualize
+            relationships: List of relationships to visualize
+            **kwargs: Backend-specific options
+            
+        Returns:
+            Base64-encoded PNG image data, or empty string if failed
+        """
+        raise NotImplementedError("Subclasses must implement generate_image_base64()")
+    
+    @abstractmethod
     def is_available(self) -> bool:
         """Check if this visualization backend is available.
         

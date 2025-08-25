@@ -122,6 +122,20 @@ class GraphVisualizer(PropertySummaryMixin):
         """
         return self._backend_impl.generate_image(nodes, relationships, output_path, **kwargs)
     
+    def generate_image_base64(self, nodes: List[GraphNode], relationships: List[GraphRelationship],
+                             **kwargs) -> str:
+        """Generate visualization as base64 string using the selected backend.
+        
+        Args:
+            nodes: List of nodes to visualize
+            relationships: List of relationships to visualize
+            **kwargs: Backend-specific options
+            
+        Returns:
+            Base64-encoded image data
+        """
+        return self._backend_impl.generate_image_base64(nodes, relationships, **kwargs)
+    
     def switch_backend(self, backend: str):
         """Switch to a different visualization backend.
         
