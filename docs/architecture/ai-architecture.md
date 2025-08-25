@@ -4,6 +4,8 @@
 
 This document outlines the architectural design of a sophisticated Hybrid Retrieval-Augmented Generation (RAG) system that combines semantic vector search with graph-based knowledge retrieval. The architecture addresses the critical challenge of extracting actionable intelligence from complex document repositories containing both textual content and embedded technical diagrams.
 
+**Core Design Principle**: Explicitly linking text chunks to their associated diagrams via metadata produces significantly more accurate and contextually aware responses compared to text-only RAG approaches.
+
 ## Architectural Imperatives
 
 ### The Context-Aware Retrieval Challenge
@@ -73,26 +75,151 @@ sequenceDiagram
     IMG->>GDB: Structured graph data
 ```
 
-### Content Extractor & Linker Design
+### Parser & Linker Implementation
 
-The critical innovation lies in the **Content Extractor & Linker** component, which creates the metadata bridge:
+The critical innovation lies in the **Parser & Linker** component, which creates the metadata bridge between text and diagrams using document section structure:
 
 ```python
-# Conceptual implementation
-class ContentLinker:
-    def extract_and_link(self, document):
-        for element in document.elements:
-            if element.type == "image":
-                diagram_id = generate_unique_id()
-                context_paragraphs = self.capture_context(element)
+from docx import Document
+from bs4 import BeautifulSoup
+import requests
+
+class DocumentParserLinker:
+    def parse_and_link(self, source):
+        """
+        Parse document (.docx or Confluence) and establish text-diagram 
+        associations via section-based metadata linking
+        """
+        if source.endswith('.docx'):
+            elements = self.parse_docx_sections(source)
+        elif source.startswith('confluence:'):
+            page_id = source.replace('confluence:', '')
+            elements = self.parse_confluence_sections(page_id)
+        
+        return self.process_elements_by_section(elements)
+    
+    def parse_docx_sections(self, docx_path):
+        """Parse .docx file using heading hierarchy for sections"""
+        doc = Document(docx_path)
+        current_section = "introduction"
+        elements = []
+        
+        for paragraph in doc.paragraphs:
+            element = {'content': paragraph.text, 'type': 'text'}
+            
+            # Update section based on heading styles
+            if paragraph.style.name.startswith('Heading'):
+                level = int(paragraph.style.name.split()[-1])
+                if level == 1:  # Main section (Heading 1)
+                    current_section = self.normalize_section_name(paragraph.text)
+                elif level == 2:  # Subsection (Heading 2)
+                    current_section = f"{current_section}_{self.normalize_section_name(paragraph.text)}"
+            
+            element['section'] = current_section
+            elements.append(element)
+        
+        # Process embedded images/diagrams
+        for rel in doc.part.rels.values():
+            if "image" in rel.target_ref:
+                elements.append({
+                    'type': 'image',
+                    'content': rel.target_ref,
+                    'section': current_section  # Assign to current section
+                })
+        
+        return elements
+    
+    def parse_confluence_sections(self, page_id):
+        """Parse Confluence page using HTML heading structure"""
+        # Get page content via Confluence API
+        url = f"{self.confluence_base_url}/rest/api/content/{page_id}?expand=body.storage"
+        response = requests.get(url, auth=self.confluence_auth)
+        html_content = response.json()['body']['storage']['value']
+        
+        soup = BeautifulSoup(html_content, 'html.parser')
+        current_section = "introduction"
+        elements = []
+        
+        for element in soup.find_all(['h1', 'h2', 'h3', 'p', 'ac:image', 'img']):
+            if element.name.startswith('h'):  # Heading
+                level = int(element.name[1])
+                if level == 1:
+                    current_section = self.normalize_section_name(element.get_text())
+                elif level == 2:
+                    current_section = f"{current_section}_{self.normalize_section_name(element.get_text())}"
                 
-                # Tag context with diagram association
-                for paragraph in context_paragraphs:
-                    paragraph.metadata["associated_diagram_id"] = diagram_id
+                elements.append({
+                    'type': 'heading',
+                    'content': element.get_text(),
+                    'section': current_section
+                })
+            
+            elif element.name == 'p' and element.get_text().strip():
+                elements.append({
+                    'type': 'text',
+                    'content': element.get_text(),
+                    'section': current_section
+                })
+            
+            elif element.name in ['ac:image', 'img']:  # Confluence diagrams
+                elements.append({
+                    'type': 'image',
+                    'content': element.get('src') or element.get('ac:filename'),
+                    'section': current_section
+                })
+        
+        return elements
+    
+    def process_elements_by_section(self, elements):
+        """Link text and diagrams that belong to the same section"""
+        sections = {}
+        
+        # Group elements by section
+        for element in elements:
+            section = element['section']
+            if section not in sections:
+                sections[section] = {'text': [], 'diagrams': []}
+            
+            if element['type'] == 'text':
+                sections[section]['text'].append(element)
+            elif element['type'] == 'image':
+                sections[section]['diagrams'].append(element)
+        
+        # Process each section
+        for section_name, section_content in sections.items():
+            # Process diagrams first
+            diagram_ids = []
+            for diagram in section_content['diagrams']:
+                diagram_id = f"diagram_{section_name}_{len(diagram_ids)}"
+                diagram_ids.append(diagram_id)
                 
-                # Process image through diagram-to-graph pipeline
-                self.process_image(element.data, diagram_id)
+                # Process through diagram-to-graph pipeline
+                graph_data = self.process_diagram_to_graph(diagram['content'], diagram_id)
+                self.store_graph_with_partitioning(graph_data, diagram_id)
+            
+            # Process text chunks and link to section diagrams
+            for text_element in section_content['text']:
+                chunk = self.create_text_chunk(text_element['content'])
+                chunk.metadata.update({
+                    "section": section_name,
+                    "associated_diagram_ids": diagram_ids,  # All diagrams in this section
+                    "reference_type": "section_based"
+                })
+                
+                # Generate embeddings and store
+                chunk.embedding = self.generate_embedding(chunk.text)
+                self.vector_db.store(chunk)
+    
+    def normalize_section_name(self, text):
+        """Convert heading text to normalized section identifier"""
+        return text.lower().replace(' ', '_').replace('-', '_').strip()
 ```
+
+**Key Implementation Details**:
+- **Document Structure Parsing**: Leverages native heading hierarchy in .docx and Confluence HTML
+- **Section-Based Linking**: Simple rule - text and diagrams in same section are associated
+- **Format Support**: Handles both .docx files (via python-docx) and Confluence pages (via API)
+- **Automatic Association**: All text chunks automatically linked to all diagrams in their section
 
 ### Vector Database Schema
 
@@ -100,10 +227,12 @@ class ContentLinker:
 {
   "vector": [0.1, 0.2, ...],
   "metadata": {
-    "text": "The following flowchart shows the approval steps...",
-    "source_document": "approvals.docx",
-    "chunk_id": "chunk_123",
-    "associated_diagram_id": "diagram_approvals_1"
+    "text": "The system implements multiple security zones with firewalls controlling access between tiers...",
+    "source_document": "network_architecture.docx",
+    "chunk_id": "chunk_123", 
+    "section": "security_architecture",
+    "associated_diagram_ids": ["diagram_security_architecture_0", "diagram_security_architecture_1"],
+    "reference_type": "section_based"
   }
 }
 ```
@@ -127,40 +256,137 @@ class ContentLinker:
 
 ## Query Processing Architecture
 
-### Two-Phase Retrieval Strategy
+### Two-Phase Retrieval Implementation
 
 ```mermaid
 graph TD
-    A[User Query] --> B[Vector Search Engine]
-    B --> C[Relevant Text Chunks]
-    C --> D[Extract associated_diagram_id]
-    D --> E[Graph Database Query]
+    A[User Query] --> B{Vector Search}
+    B --> C[Top-K Text Chunks]
+    C --> D{Extract diagram_id from metadata}
+    D --> E[Graph DB Query with diagram_id]
     E --> F[Contextual Graph Data]
     F --> G[Context Assembly]
     C --> G
-    G --> H[LLM Response Synthesis]
-    G --> I[Mermaid Generation]
-    H --> J[Final Response]
-    I --> J
+    G --> H[LLM Prompt Construction]
+    H --> I[Final Response]
 ```
 
-### Context Assembly Pattern
+**Implementation Flow**:
+
+```python
+class TwoPhaseRetriever:
+    async def retrieve(self, query: str) -> HybridContext:
+        """
+        Execute two-phase retrieval leveraging text-diagram metadata links
+        """
+        # Phase 1: Vector search on text chunks
+        text_chunks = await self.vector_search(
+            query_embedding=self.embed(query),
+            top_k=5
+        )
+        
+        # Extract diagram IDs from chunk metadata
+        diagram_ids = set()
+        for chunk in text_chunks:
+            # Handle both single and multiple diagram associations
+            if diagram_ids_list := chunk.metadata.get("associated_diagram_ids"):
+                diagram_ids.update(diagram_ids_list)
+            elif diagram_id := chunk.metadata.get("associated_diagram_id"):
+                diagram_ids.add(diagram_id)  # Backward compatibility
+        
+        # Phase 2: Retrieve graph data for identified diagrams
+        graph_context = {}
+        for diagram_id in diagram_ids:
+            # Scoped query using diagram_id partitioning
+            graph_data = await self.graph_db.query(
+                """
+                MATCH (n {diagram_id: $diagram_id})
+                OPTIONAL MATCH (n)-[r {diagram_id: $diagram_id}]->(m)
+                RETURN n, r, m
+                """,
+                parameters={"diagram_id": diagram_id}
+            )
+            graph_context[diagram_id] = graph_data
+        
+        return HybridContext(
+            text_chunks=text_chunks,
+            graph_data=graph_context,
+            linked_diagrams=list(diagram_ids)
+        )
+```
+
+### Context Assembly Implementation
 
 ```python
 class ContextAssembler:
-    def assemble_context(self, text_chunks, graph_data):
-        return {
-            "user_query": self.original_query,
-            "retrieved_text": [chunk.content for chunk in text_chunks],
-            "retrieved_graph": {
-                "nodes": graph_data.nodes,
-                "relationships": graph_data.relationships
-            },
-            "metadata": {
-                "confidence_scores": self.calculate_confidence(text_chunks),
-                "diagram_sources": self.extract_diagram_sources(text_chunks)
-            }
-        }
+    def assemble_prompt(self, query: str, hybrid_context: HybridContext) -> str:
+        """
+        Assemble context with explicit text-diagram relationships for LLM
+        """
+        prompt_parts = []
+        
+        # User query
+        prompt_parts.append(f"User Query: {query}\n")
+        prompt_parts.append("Use the following context to answer. ")
+        prompt_parts.append("The text and diagrams are explicitly linked.\n\n")
+        
+        # Retrieved text with diagram associations
+        prompt_parts.append("Retrieved Text Context:\n")
+        prompt_parts.append("-" * 40 + "\n")
+        
+        for chunk in hybrid_context.text_chunks:
+            prompt_parts.append(f"[From: {chunk.metadata['source_document']}]\n")
+            
+            # Handle multiple diagram references
+            if diagram_ids := chunk.metadata.get('associated_diagram_ids'):
+                prompt_parts.append(f"[References diagrams: {', '.join(diagram_ids)}]\n")
+            elif diagram_id := chunk.metadata.get('associated_diagram_id'):
+                prompt_parts.append(f"[Related to diagram: {diagram_id}]\n")
+            
+            if ref_type := chunk.metadata.get('reference_type'):
+                prompt_parts.append(f"[Reference type: {ref_type}]\n")
+            
+            prompt_parts.append(f"{chunk.text}\n\n")
+        
+        # Retrieved graph data organized by diagram
+        if hybrid_context.graph_data:
+            prompt_parts.append("Related Diagram Structures:\n")
+            prompt_parts.append("-" * 40 + "\n")
+            
+            for diagram_id, graph_data in hybrid_context.graph_data.items():
+                prompt_parts.append(f"\nDiagram {diagram_id}:\n")
+                prompt_parts.append(self.format_graph_for_llm(graph_data))
+                prompt_parts.append("\n")
+        
+        # Instructions for grounded response
+        prompt_parts.append("\nInstructions:\n")
+        prompt_parts.append("- Answer based ONLY on the provided context\n")
+        prompt_parts.append("- The text descriptions and diagram structures are related\n")
+        prompt_parts.append("- Cite specific sources when making claims\n")
+        
+        return "".join(prompt_parts)
+    
+    def format_graph_for_llm(self, graph_data) -> str:
+        """Format graph nodes and relationships for LLM understanding"""
+        formatted = []
+        
+        # Format nodes
+        formatted.append("Nodes:\n")
+        for node in graph_data.nodes:
+            formatted.append(f"  - {node.name} (Type: {node.type})")
+            if node.properties:
+                for key, value in node.properties.items():
+                    formatted.append(f"    * {key}: {value}")
+        
+        # Format relationships
+        formatted.append("\nRelationships:\n")
+        for rel in graph_data.relationships:
+            formatted.append(f"  - {rel.source} --[{rel.type}]--> {rel.target}")
+            if rel.properties:
+                for key, value in rel.properties.items():
+                    formatted.append(f"    * {key}: {value}")
+        
+        return "\n".join(formatted)
 ```
 
 ## Graph Database Design Excellence
@@ -580,6 +806,38 @@ class HallucinationDetector:
 - **Neural-Symbolic Reasoning**: Hybrid AI approaches
 - **Automated Knowledge Curation**: Self-improving knowledge bases
 
+## Implementation Best Practices
+
+### Text-Diagram Linking Strategy
+
+**Section-Based Linking Approach**:
+
+1. **Document Structure Recognition**: Parse heading hierarchy (Heading 1, Heading 2) in .docx or HTML headings (h1, h2) in Confluence
+2. **Automatic Section Assignment**: All text and diagrams automatically inherit their containing section identifier
+3. **Simple Association Rule**: Text chunks are linked to all diagrams within the same document section
+4. **Format Flexibility**: Works consistently across .docx files and Confluence pages using native document structure
+
+### Ingestion Pipeline Optimization
+
+**Key Implementation Patterns**:
+- **Section-First Processing**: Parse document structure and assign sections before content processing
+- **Deterministic Naming**: Use consistent section-based diagram IDs (`diagram_{section_name}_{index}`)
+- **Native Format Support**: Leverage python-docx for .docx and BeautifulSoup for Confluence HTML parsing
+
+### Retrieval Optimization
+
+**Performance Considerations**:
+- **Section Indexing**: Index `section` and `associated_diagram_ids` fields for fast metadata filtering
+- **Batch Graph Queries**: Retrieve multiple section diagrams in single Neo4j query
+- **Section-Based Caching**: Cache embeddings and graph data by document section for efficiency
+
+### Context Assembly Best Practices
+
+**Effective Patterns**:
+- **Section Organization**: Group text and diagrams by document section in prompts
+- **Section Attribution**: Include section names alongside source documents for context
+- **Clear Relationships**: Explicitly state that text and diagrams are from the same document section
+
 ## Implementation Considerations
 
 ### Deployment Architecture
@@ -614,6 +872,23 @@ graph TB
 
 ## Conclusion
 
-This hybrid RAG architecture represents a significant advancement in document intelligence systems, combining the strengths of semantic search with the contextual richness of graph-based knowledge representation. The design's emphasis on explicit metadata linking and architectural modularity creates a robust foundation for building next-generation knowledge systems that truly understand the relationship between textual and visual information.
+This hybrid RAG architecture represents a significant advancement in document intelligence systems, combining the strengths of semantic search with the contextual richness of graph-based knowledge representation. The core principle of explicit text-diagram linking via metadata produces significantly more accurate and contextually aware responses than text-only RAG approaches.
 
-The architecture's technical excellence lies not just in its individual components, but in their elegant integration, creating a system that delivers comprehensive, contextually-aware responses while maintaining the performance and scalability requirements of enterprise deployments.
+### Key Architectural Achievements
+
+**Technical Excellence**:
+- **Metadata Bridge Architecture**: The `associated_diagram_id` field creates a robust link between text chunks and graph data
+- **Two-Phase Retrieval**: Vector search followed by scoped graph retrieval provides comprehensive context
+- **Performance Optimization**: Sub-second retrieval times through indexed metadata and partitioned graph storage
+- **Scalability Design**: Clean data partitioning via `diagram_id` enables horizontal scaling
+
+**Implementation Strengths**:
+- **Infrastructure Reuse**: Existing `diagram-to-graph` pipeline seamlessly integrated as microservice
+- **Simplicity in Design**: Explicit linking in prompts more effective than complex context weaving
+- **Reliability Framework**: Multi-dimensional confidence scoring and hallucination reduction built-in
+
+### Production Readiness
+
+The architecture's emphasis on explicit metadata linking and modular design creates a robust foundation for enterprise deployment. The detailed implementation patterns for text-diagram linking, combined with comprehensive reliability mechanisms, ensure the system can deliver accurate, contextually-aware responses at scale.
+
+The true innovation lies not just in individual components, but in their elegant integration - creating a system that genuinely understands the relationship between textual descriptions and visual diagrams, enabling a new level of document intelligence for complex technical documentation.
