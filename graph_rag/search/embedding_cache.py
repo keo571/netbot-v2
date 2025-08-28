@@ -54,7 +54,7 @@ class EmbeddingCache:
         
         self._cached_diagram_id = diagram_id
         self._cached_data = cached_diagram
-        print(f"Cached {len(cached_diagram.node_data)} nodes")
+        print(f"✅ Cached embedding matrix: {cached_diagram.node_embeddings.shape} for {len(cached_diagram.node_data)} nodes")
     
     def invalidate_cache(self, diagram_id: str):
         """

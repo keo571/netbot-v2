@@ -57,7 +57,6 @@ class VisualizationFactory:
             for backend_name, backend_class in VisualizationFactory.BACKEND_REGISTRY.items():
                 if backend_class().is_available():
                     backend = backend_name
-                    print(f"Auto-selected visualization backend: {backend}")
                     return backend_class()
             
             # If no backend available
@@ -144,7 +143,6 @@ class GraphVisualizer(PropertySummaryMixin):
         """
         self._backend_impl = VisualizationFactory.create_visualizer(backend)
         self.backend = backend
-        print(f"Switched to {backend} backend")
      
     
     # ========== Jupyter Integration ==========

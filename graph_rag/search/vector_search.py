@@ -101,7 +101,7 @@ class VectorSearch:
                 f"python embeddings/cli.py add {diagram_id}"
             )
         
-        # Vectorized similarity computation (much faster than loops)
+        # Vectorized similarity computation using matrix operations
         similarities = self.cosine_similarity_vectorized(query_embedding, embedding_matrix)
         
         # Get top-k indices using numpy's efficient sorting
@@ -132,7 +132,7 @@ class VectorSearch:
         if filtered_count > 0:
             print(f"Vector search: {len(good_indices)} quality nodes (filtered out {filtered_count} low-similarity)")
         else:
-            print(f"Vector search found {len(top_nodes)} similar nodes")
+            print(f"🔍 Matrix search: {len(top_nodes)} similar nodes (from {embedding_matrix.shape[0]}x{embedding_matrix.shape[1]} matrix)")
         
         return top_nodes
     
@@ -181,8 +181,10 @@ class VectorSearch:
             # Add intermediate nodes to result
             result_nodes.extend(intermediate_nodes)
             
-            # Combine direct and path relationships
-            all_rels = direct_rels + path_rels
+            # Combine direct and path relationships, removing duplicates
+            seen_rel_ids = {rel.id for rel in direct_rels}
+            unique_path_rels = [rel for rel in path_rels if rel.id not in seen_rel_ids]
+            all_rels = direct_rels + unique_path_rels
             
             print(f"Built hybrid subgraph: {len(result_nodes)} nodes ({len(intermediate_nodes)} intermediate), {len(all_rels)} relationships")
         else:

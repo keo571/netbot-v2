@@ -104,10 +104,10 @@ class GraphRAG:
         """Configure Gemini API (called once during initialization)"""
         genai.configure(api_key=self.gemini_api_key)
     
-    def _ensure_visualizer_initialized(self):
+    def _ensure_visualizer_initialized(self, backend="graphviz"):
         """Ensure visualizer is initialized"""
         if not self._visualizer:
-            self._visualizer = GraphVisualizer()
+            self._visualizer = GraphVisualizer(backend=backend)
     
     def _format_nodes_for_explanation(self, nodes):
         """Format nodes for explanation text"""
@@ -268,11 +268,8 @@ class GraphRAG:
         if not graph_data.get("nodes"):
             return {"error": "No nodes found for visualization"}
         
-        # Step 2: Generate visualization as base64 (no file saving)
-        self._ensure_visualizer_initialized()
-        
-        # Generate visualization based on backend
-        self._visualizer.switch_backend(backend)
+        # Step 2: Generate visualization as base64 (server-side GraphViz rendering)
+        self._ensure_visualizer_initialized(backend)
         
         # Set appropriate default layout based on backend
         if not layout:
@@ -312,7 +309,7 @@ class GraphRAG:
         result = {
             "nodes": graph_data["nodes"],
             "relationships": graph_data["relationships"],
-            "image_path": image_base64,  # Now contains base64 data instead of file path
+            "image_path": image_base64,  # Base64 image data for display
             "explanation": explanation,
             "method": graph_data.get("method", method)
         }

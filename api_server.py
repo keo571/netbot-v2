@@ -60,9 +60,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global cache for pre-warmed data
+# Global cache for NetBot instance
 _cached_netbot = None
-_embeddings_cache_warmed = False
 
 
 # Security
@@ -91,7 +90,8 @@ class ChatResponse(BaseModel):
     response: str
     results: Optional[SearchResults] = None
     explanation: Optional[str] = None
-    visualization_path: Optional[str] = None
+    visualization_path: Optional[str] = None  # Legacy image support
+    visualization_data: Optional[Dict[str, Any]] = None  # New JSON visualization data
     diagram_id: str
     query: str
 
@@ -205,7 +205,7 @@ def verify_admin_token(credentials: HTTPAuthorizationCredentials = Depends(secur
 # Utility functions
 def get_netbot() -> NetBot:
     """Get cached NetBot instance with error handling"""
-    global _cached_netbot, _embeddings_cache_warmed
+    global _cached_netbot
     
     if _cached_netbot is None:
         try:
@@ -217,69 +217,10 @@ def get_netbot() -> NetBot:
                 detail=f"Failed to initialize NetBot: {str(e)}"
             )
     
-    # Pre-warm embeddings cache on first use
-    if not _embeddings_cache_warmed:
-        try:
-            asyncio.create_task(_prewarm_embeddings_cache())
-            _embeddings_cache_warmed = True
-        except Exception as e:
-            print(f"⚠️ Failed to start cache prewarming: {e}")
+    # Cache will load on first request (lazy loading)
     
     return _cached_netbot
 
-async def _prewarm_embeddings_cache():
-    """Pre-warm embeddings cache for known diagrams"""
-    try:
-        print("🔥 Pre-warming embeddings cache...")
-        
-        def _do_prewarm():
-            try:
-                # Get list of diagrams with embeddings
-                from graph_rag.database.connection import Neo4jConnection
-                db = Neo4jConnection(
-                    uri=os.getenv('NEO4J_URI', 'bolt://localhost:7687'),
-                    user=os.getenv('NEO4J_USER', 'neo4j'),
-                    password=os.getenv('NEO4J_PASSWORD')
-                )
-                
-                query = """
-                MATCH (n)
-                WHERE n.diagram_id IS NOT NULL AND n.embedding IS NOT NULL
-                RETURN DISTINCT n.diagram_id as diagram_id
-                LIMIT 5
-                """
-                
-                with db.get_session() as session:
-                    results = session.run(query)
-                    diagram_ids = [record['diagram_id'] for record in results]
-                
-                db.close()
-                
-                if diagram_ids:
-                    print(f"🔥 Pre-warming cache for {len(diagram_ids)} diagrams...")
-                    # Pre-warm the first diagram's cache
-                    for diagram_id in diagram_ids[:1]:  # Just warm the first one for now
-                        try:
-                            netbot = _cached_netbot
-                            # Trigger cache loading
-                            netbot.search("test", diagram_id, method="vector", top_k=1)
-                            print(f"✅ Pre-warmed cache for {diagram_id}")
-                            break  # Only pre-warm one diagram for speed
-                        except Exception as e:
-                            print(f"⚠️ Failed to pre-warm {diagram_id}: {e}")
-                else:
-                    print("📋 No diagrams with embeddings found for pre-warming")
-                    
-            except Exception as e:
-                print(f"⚠️ Cache pre-warming failed: {e}")
-        
-        # Run in thread pool to avoid blocking startup
-        loop = asyncio.get_event_loop()
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            await loop.run_in_executor(executor, _do_prewarm)
-            
-    except Exception as e:
-        print(f"⚠️ Cache pre-warming failed: {e}")
 
 def save_uploaded_file(upload_file: UploadFile) -> str:
     """Save uploaded file to temporary location"""
@@ -325,44 +266,20 @@ async def chat_endpoint(request: ChatRequest):
     netbot = get_netbot()
     
     try:
-        # Check if we need visualization for this diagram
-        skip_visualization = request.diagram_id in sent_visualizations
+        # Always generate visualization data (disabled caching for better UX)
+        skip_visualization = False  # Always send visualization data
         
         def run_search_operation():
             """Run search operation in thread pool"""
-            if skip_visualization:
-                # Use faster search-only method for repeated requests
-                results = netbot.search(
-                    query=request.message,
-                    diagram_id=request.diagram_id,
-                    method=request.method
-                )
-                # Add explanation if requested
-                if request.explanation_detail != "none":
-                    # Generate explanation directly
-                    graph_rag = netbot.get_graph_rag()
-                    try:
-                        explanation = graph_rag.explain_subgraph(
-                            results.get('nodes', []),
-                            results.get('relationships', []),
-                            request.message,
-                            detailed=(request.explanation_detail == "detailed")
-                        )
-                        results['explanation'] = explanation
-                    finally:
-                        graph_rag.close()
-                return results
-            else:
-                # First request - use full query_and_visualize
-                return netbot.query_and_visualize(
-                    query=request.message,
-                    diagram_id=request.diagram_id,
-                    backend="graphviz",
-                    layout="dot",  # Better layout for hierarchical/star patterns
-                    explanation_detail=request.explanation_detail,
-                    method=request.method,
-                    show_edge_properties=False  # Cleaner edge labels
-                )
+            # Always use full query_and_visualize to get visualization data
+            return netbot.query_and_visualize(
+                query=request.message,  # NetBot uses 'query' parameter
+                diagram_id=request.diagram_id,
+                backend="graphviz",
+                layout="dot",  # Better layout for hierarchical/star patterns
+                explanation_detail=request.explanation_detail,  # NetBot uses 'explanation_detail'
+                method=request.method
+            )
         
         # Run the search operation in a thread pool to avoid blocking
         loop = asyncio.get_event_loop()
@@ -380,22 +297,17 @@ async def chat_endpoint(request: ChatRequest):
         # Transform results to clean API format
         api_results = transform_to_api_results(results)
         
-        # Handle visualization data
+        # Handle visualization data - now using JSON format instead of images
         visualization_data = None
         
-        if skip_visualization:
-            print(f"📋 Skipped visualization generation for {request.diagram_id}")
-            visualization_data = None
+        # Always send GraphViz visualization data (base64 image)
+        image_base64 = results.get('image_path')  # Base64 image data
+        if image_base64:
+            visualization_data = image_base64  # Base64 image for frontend
+            print(f"📤 GraphViz image sent for {request.diagram_id}")
         else:
-            # First request - extract and send visualization
-            image_base64 = results.get('image_path')  # Contains base64 data
-            if image_base64:
-                visualization_data = image_base64  # Already in base64 format
-                sent_visualizations.add(request.diagram_id)
-                print(f"📤 First-time visualization sent for {request.diagram_id}")
-            else:
-                print(f"⚠️ No visualization data available")
-                visualization_data = None
+            print(f"⚠️ No visualization image available for {request.diagram_id}")
+            visualization_data = None
         
         node_count = len(results.get('nodes', []))
         relationship_count = len(results.get('relationships', []))
@@ -403,26 +315,29 @@ async def chat_endpoint(request: ChatRequest):
         # Simple explanation or summary
         base_explanation = results.get('explanation') 
         if not base_explanation and request.explanation_detail != "none":
-            # Generate simple explanation based on results
-            node_types = list(set(getattr(node, 'type', 'Unknown') for node in results.get('nodes', [])))
-            if node_types:
-                base_explanation = f"Found network components of types: {', '.join(node_types[:3])}{'...' if len(node_types) > 3 else ''}"
+            # Generate simple explanation based on results - use api_results which are serialized
+            if api_results and api_results.nodes:
+                node_types = list(set(node.type for node in api_results.nodes if node.type))
+                if node_types:
+                    base_explanation = f"Found network components of types: {', '.join(node_types[:3])}{'...' if len(node_types) > 3 else ''}"
+                else:
+                    base_explanation = "Analysis completed successfully."
             else:
                 base_explanation = "Analysis completed successfully."
         elif not base_explanation:
             base_explanation = None
         
-        # Summary with diagram_id in the main response (only if diagram_id is provided)
+        # Create summary for main response
         if request.diagram_id and request.diagram_id.strip():
-            summary = f"**Found {node_count} relevant components with {relationship_count} relationships in diagram: `{request.diagram_id}`**"
+            response_text = f"**Found {node_count} relevant components with {relationship_count} connections for your query in diagram: `{request.diagram_id}`**"
         else:
-            summary = f"**Found {node_count} relevant components with {relationship_count} relationships**"
+            response_text = f"**Found {node_count} relevant components with {relationship_count} connections for your query**"
         
         return ChatResponse(
-            response=summary,
+            response=response_text,
             results=api_results,
             explanation=base_explanation,  # AI explanation in separate section
-            visualization_path=visualization_data,  # Base64 data
+            visualization_path=visualization_data,  # Base64 image data
             diagram_id=request.diagram_id,
             query=request.message
         )
