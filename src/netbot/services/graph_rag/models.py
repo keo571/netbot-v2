@@ -95,7 +95,7 @@ class SearchResult(BaseModel, TimestampMixin):
     
     # Generated content
     explanation: Optional[str] = Field(default=None, description="AI-generated explanation")
-    visualization_data: Optional[str] = Field(default=None, description="Visualization data (base64)")
+    visualization_data: Optional[Dict[str, Any]] = Field(default=None, description="Visualization JSON data for frontend rendering")
     
     # Quality metrics
     relevance_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Overall relevance")
@@ -148,10 +148,10 @@ class ExplanationRequest(BaseModel):
 
 
 class VisualizationResult(BaseModel):
-    """Result of visualization generation."""
+    """Result of visualization generation - now returns JSON data instead of images."""
     
-    visualization_data: str = Field(..., description="Base64 encoded image or SVG data")
-    format: str = Field(..., description="Output format")
+    visualization_data: Dict[str, Any] = Field(..., description="JSON visualization data for frontend rendering")
+    visualization_type: str = Field(default="network_graph", description="Type of visualization")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Visualization metadata")
     
     success: bool = Field(default=True, description="Whether visualization succeeded")

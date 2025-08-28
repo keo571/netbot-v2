@@ -18,7 +18,7 @@ from .models import (
 )
 from .repository import GraphRAGRepository
 from .retrieval import TwoPhaseRetriever
-from .visualization import VisualizationService
+# from .visualization import VisualizationService  # Removed - no longer using server-side rendering
 
 
 class GraphRAGService:
@@ -42,7 +42,7 @@ class GraphRAGService:
             embedding_client=self.embedding_client,
             repository=self.repository
         )
-        self.visualization_service = VisualizationService()
+        # self.visualization_service = VisualizationService()  # Removed - no longer using server-side rendering
         
         self.logger.info("GraphRAG Service initialized")
     
@@ -88,16 +88,10 @@ class GraphRAGService:
                 )
                 result.explanation = self.generate_explanation(explanation_request)
             
-            # Generate visualization if requested
+            # Generate visualization data if requested (JSON only, no server-side rendering)
             if request.include_visualization and (result.nodes or result.relationships):
-                viz_request = VisualizationRequest()
-                viz_result = self.visualization_service.create_visualization(
-                    nodes=result.nodes,
-                    relationships=result.relationships,
-                    request=viz_request
-                )
-                if viz_result.success:
-                    result.visualization_data = viz_result.visualization_data
+                viz_data = self._create_visualization_json(result.nodes, result.relationships, request.diagram_id)
+                result.visualization_data = viz_data
             
             self.logger.info(
                 f"Search completed: {len(result.nodes)} nodes, "
@@ -186,7 +180,7 @@ class GraphRAGService:
                  relationships: List[GraphRelationship],
                  request: VisualizationRequest) -> VisualizationResult:
         """
-        Generate graph visualization.
+        Generate graph visualization data for frontend rendering.
         
         Args:
             nodes: Nodes to visualize
@@ -194,13 +188,27 @@ class GraphRAGService:
             request: Visualization parameters
             
         Returns:
-            Visualization result with image data
+            Visualization result with JSON data
         """
-        return self.visualization_service.create_visualization(
-            nodes=nodes,
-            relationships=relationships,
-            request=request
-        )
+        try:
+            viz_data = self._create_visualization_json(
+                nodes=nodes,
+                relationships=relationships,
+                diagram_id=getattr(request, 'diagram_id', 'unknown')
+            )
+            return VisualizationResult(
+                visualization_data=viz_data,
+                visualization_type="network_graph",
+                success=True
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to create visualization: {e}")
+            return VisualizationResult(
+                visualization_data={},
+                visualization_type="network_graph",
+                success=False,
+                error_message=str(e)
+            )
     
     def search_and_visualize(self, request: SearchRequest) -> SearchResult:
         """
@@ -453,3 +461,115 @@ class GraphRAGService:
         }
         
         return prompts.get(diagram_type, prompts['mixed'])
+    
+    def _create_visualization_json(
+        self, 
+        nodes: List[GraphNode], 
+        relationships: List[GraphRelationship],
+        diagram_id: str
+    ) -> Dict[str, Any]:
+        """
+        Create JSON visualization data for frontend rendering.
+        Fast alternative to server-side image generation.
+        
+        Args:
+            nodes: Graph nodes to visualize
+            relationships: Graph relationships to visualize
+            diagram_id: Source diagram ID
+            
+        Returns:
+            JSON data for frontend visualization
+        """
+        # Convert nodes to frontend format
+        viz_nodes = []
+        for node in nodes:
+            viz_nodes.append({
+                'id': node.id,
+                'label': node.label,
+                'type': node.type,
+                'properties': node.properties,
+                # Add visualization hints for frontend
+                'size': min(max(len(str(node.properties)), 20), 100),  # Size based on content
+                'color': self._get_node_color(node.type),
+                'shape': self._get_node_shape(node.type)
+            })
+        
+        # Convert relationships to frontend format
+        viz_relationships = []
+        for rel in relationships:
+            viz_relationships.append({
+                'source': rel.source_id,
+                'target': rel.target_id,
+                'label': rel.type,
+                'type': rel.type,
+                'properties': rel.properties,
+                # Add visualization hints
+                'weight': rel.confidence_score,
+                'color': self._get_edge_color(rel.type),
+                'style': self._get_edge_style(rel.type)
+            })
+        
+        return {
+            'visualization_type': 'network_graph',
+            'nodes': viz_nodes,
+            'edges': viz_relationships,
+            'metadata': {
+                'diagram_id': diagram_id,
+                'node_count': len(viz_nodes),
+                'edge_count': len(viz_relationships),
+                'layout_hint': 'force_directed'
+            }
+        }
+    
+    def _get_node_color(self, node_type: str) -> str:
+        """Get color for node type."""
+        color_map = {
+            'Server': '#4A90E2',
+            'Database': '#50E3C2',
+            'LoadBalancer': '#F5A623',
+            'Firewall': '#D0021B',
+            'Router': '#7ED321',
+            'Switch': '#9013FE',
+            'Process': '#4A90E2',
+            'Decision': '#F5A623',
+            'DataStore': '#50E3C2',
+            'default': '#B8B8B8'
+        }
+        return color_map.get(node_type, color_map['default'])
+    
+    def _get_node_shape(self, node_type: str) -> str:
+        """Get shape for node type."""
+        shape_map = {
+            'Server': 'box',
+            'Database': 'cylinder',
+            'LoadBalancer': 'diamond',
+            'Firewall': 'triangle',
+            'Router': 'hexagon',
+            'Switch': 'ellipse',
+            'Process': 'box',
+            'Decision': 'diamond',
+            'DataStore': 'cylinder',
+            'default': 'circle'
+        }
+        return shape_map.get(node_type, shape_map['default'])
+    
+    def _get_edge_color(self, rel_type: str) -> str:
+        """Get color for relationship type."""
+        color_map = {
+            'CONNECTS_TO': '#333333',
+            'FLOWS_TO': '#4A90E2',
+            'ROUTES_TO': '#7ED321',
+            'PROTECTS': '#D0021B',
+            'STORES_IN': '#50E3C2',
+            'default': '#666666'
+        }
+        return color_map.get(rel_type, color_map['default'])
+    
+    def _get_edge_style(self, rel_type: str) -> str:
+        """Get style for relationship type."""
+        style_map = {
+            'PROTECTS': 'dashed',
+            'STORES_IN': 'dotted',
+            'default': 'solid'
+        }
+        return style_map.get(rel_type, style_map['default'])
