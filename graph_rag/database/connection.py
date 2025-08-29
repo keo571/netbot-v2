@@ -94,6 +94,10 @@ class Neo4jConnection:
                 raise ConnectionError("Cannot get connection from pool")
         return self._driver.session()
     
+    def execute(self, session, query: str, params: dict = None):
+        """Execute query via session"""
+        return session.run(query, params or {})
+    
     def create_performance_indexes(self) -> bool:
         """Create indexes to improve query performance based on actual query patterns"""
         indexes = [

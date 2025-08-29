@@ -192,8 +192,8 @@ class GraphRAG:
             from .database.data_access import DataAccess
             self._connection = Neo4jConnection(self.neo4j_uri, self.neo4j_user, self.neo4j_password)
             data_access = DataAccess(self._connection)
-            schema_extractor = SchemaExtractor(self._connection)
             query_executor = QueryExecutor(self._connection)
+            schema_extractor = SchemaExtractor(self._connection)
             vector_search = VectorSearch(data_access, self.gemini_api_key)
             cypher_generator = CypherGenerator(self.gemini_api_key)
             self._retriever = TwoPhaseRetriever(

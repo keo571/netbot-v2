@@ -2,15 +2,14 @@
 Schema information extraction and formatting for Neo4j diagrams.
 """
 
-from .query_executor import QueryExecutor
 from typing import Dict
 
 
 class SchemaExtractor:
     """Handles schema information extraction and formatting with caching"""
     
-    def __init__(self, query_executor: QueryExecutor):
-        self.query_executor = query_executor
+    def __init__(self, connection):
+        self.connection = connection
         self._schema_cache: Dict[str, str] = {}  # diagram_id -> schema_string
     
     def extract_schema(self, session, diagram_id: str, use_cache: bool = True) -> str:
@@ -54,9 +53,7 @@ class SchemaExtractor:
         } as schema
         """
         
-        result = self.query_executor.execute_with_timing(
-            session, query, {"diagram_id": diagram_id}, "Schema extraction"
-        )
+        result = session.run(query, {"diagram_id": diagram_id})
         schema_record = result.single()
         
         if schema_record:
@@ -82,9 +79,7 @@ class SchemaExtractor:
             collect(DISTINCT keys(r)) as rel_props
         """
         
-        result = self.query_executor.execute_with_timing(
-            session, query, {"diagram_id": diagram_id}, "Schema extraction"
-        )
+        result = session.run(query, {"diagram_id": diagram_id})
         schema_record = result.single()
         
         if schema_record:

@@ -57,9 +57,7 @@ class TwoPhaseRetriever:
                 
                 # Generate and execute Cypher query
                 cypher_query = self.cypher_generator.generate_cypher_query(query, diagram_id, schema_info)
-                result = self.query_executor.execute_with_timing(
-                    session, cypher_query, operation_name="Cypher execution"
-                )
+                result = self.query_executor.execute(session, cypher_query)
                 return ResultParser.parse_query_results(result)
         except Exception as e:
             print(f"❌ Error in {operation_name}: {e}")

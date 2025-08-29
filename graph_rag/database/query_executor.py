@@ -2,7 +2,6 @@
 Query execution infrastructure for Neo4j operations.
 """
 
-import time
 from typing import List, Dict, Optional
 
 from models.graph_models import GraphNode, GraphRelationship
@@ -14,21 +13,9 @@ class QueryExecutor:
     def __init__(self, connection=None):
         self.connection = connection
     
-    def execute_with_timing(self, session, query: str, params: dict = None, 
-                           operation_name: str = "Query", profile: bool = False):
-        """Execute query with timing and optional profiling"""
-        start_time = time.time()
-        
-        if profile:
-            profile_query = f"PROFILE {query}"
-            profile_result = session.run(profile_query, params or {})
-            print("🔍 Query Profile:")
-            print(profile_result.consume().profile)
-        
-        result = session.run(query, params or {})
-        execution_time = time.time() - start_time
-        print(f"⏱️    {operation_name}: {execution_time:.2f}s")
-        return result
+    def execute(self, session, query: str, params: dict = None):
+        """Execute query"""
+        return session.run(query, params or {})
 
 
 class ResultParser:
