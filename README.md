@@ -2,7 +2,7 @@
 
 **AI-powered network diagram processing and GraphRAG system for transforming network diagrams into knowledge graphs**
 
-NetBot v2 is a sophisticated system that converts network diagrams and flowcharts into structured knowledge graphs, enabling powerful semantic search and analysis through advanced Graph-based Retrieval Augmented Generation (GraphRAG) capabilities.
+NetBot v2 is a streamlined system that converts network diagrams and flowcharts into structured knowledge graphs, enabling powerful semantic search and analysis through Graph-based Retrieval Augmented Generation (GraphRAG) capabilities.
 
 ## 🚀 Features
 
@@ -11,9 +11,9 @@ NetBot v2 is a sophisticated system that converts network diagrams and flowchart
 - **Multiple Diagram Types**: Network diagrams, flowcharts, and mixed architectures
 - **Knowledge Graph Generation**: Automatic Neo4j graph database population
 - **Visual Analysis**: AI-powered relationship extraction using Gemini 2.5 Pro
-- **Modular Architecture**: Pluggable components with unified CLI interfaces
-- **Context Management**: Session handling and conversation history
-- **Rich Visualization**: Multiple graph visualization backends
+- **Clean Architecture**: Simplified, maintainable codebase
+- **GraphViz Visualization**: High-quality graph visualizations
+- **API Server**: FastAPI-based REST API with role-based access
 
 ## 📋 Quick Start
 
@@ -21,16 +21,10 @@ NetBot v2 is a sophisticated system that converts network diagrams and flowchart
 
 ```bash
 # Basic installation
+pip install -r requirements.txt
+
+# Or install as package
 pip install -e .
-
-# With optional features
-pip install -e ".[vision,storage,nlp,vector]"
-
-# Development setup
-pip install -e ".[dev]"
-
-# Install everything
-pip install -e ".[all]"
 ```
 
 ### Environment Setup
@@ -44,18 +38,18 @@ NEO4J_URI="bolt://localhost:7687"
 NEO4J_USER="neo4j"
 NEO4J_PASSWORD="your-password"
 
-# Optional
+# Optional for OCR
 GOOGLE_APPLICATION_CREDENTIALS="path/to/google-credentials.json"
 ```
 
 ### Quick Example
 
 ```bash
-# Complete workflow (recommended)
-python cli.py quickstart data/examples/network_diagram.png diagram_001 "find load balancers"
+# Start API server
+python api_server.py
 
-# Step-by-step workflow
-python cli.py process-and-search data/examples/network_diagram.png diagram_001 "find servers" --visualize --explain
+# Or use CLI directly
+python cli.py quickstart data/examples/network_diagram.png diagram_001 "find load balancers"
 ```
 
 ## 🏗️ Architecture
@@ -66,9 +60,9 @@ python cli.py process-and-search data/examples/network_diagram.png diagram_001 "
 - **`graph_rag/`** - Advanced retrieval system with embeddings
 - **`embeddings/`** - Vector encoding and semantic search
 - **`context_manager/`** - Session and conversation management
-- **`interfaces/`** - Unified CLI system
+- **`api_server.py`** - FastAPI REST API interface
 
-### System Architecture Overview
+### System Architecture
 
 ```mermaid
 graph TB
@@ -78,237 +72,132 @@ graph TB
         C[Mixed Architectures]
     end
     
-    subgraph "Processing Layer"
-        D[diagram_processing]
-        E[embeddings]
-        F[graph_rag]
+    subgraph "Processing Pipeline"
+        D[OCR & Preprocessing]
+        E[Gemini 2.5 Pro Analysis]
+        F[Graph Generation]
     end
     
     subgraph "Storage Layer"
         G[Neo4j Graph DB]
-        H[Vector Store]
-        I[CSV Export]
+        H[Vector Embeddings]
+    end
+    
+    subgraph "Query Layer"
+        I[GraphRAG Search]
+        J[Semantic Similarity]
+        K[GraphViz Visualization]
     end
     
     subgraph "Interface Layer"
-        J[CLI Interface]
-        K[Python API]
-        L[Visualization]
+        L[REST API]
+        M[CLI Interface]
+        N[Python Client]
     end
     
     A --> D
     B --> D
     C --> D
-    D --> G
-    D --> I
     D --> E
-    E --> H
-    G --> F
-    H --> F
-    F --> J
-    F --> K
-    F --> L
+    E --> F
+    F --> G
+    F --> H
+    G --> I
+    H --> J
+    I --> K
+    J --> K
+    K --> L
+    K --> M
+    K --> N
 ```
-
-## 🔄 Core System Components
-
-### 1. Diagram Processing Pipeline
-
-The `diagram_processing` module transforms images into structured knowledge graphs through a 3-phase pipeline:
-
-```mermaid
-graph TB
-    subgraph "Phase 1: Preprocessing (ImagePreprocessor)"
-        A1[Image Input] --> B1[Google Cloud Vision OCR]
-        A1 --> C1[OpenCV Shape Detection]
-        B1 --> D1[Text Categorization]
-        C1 --> E1[Shape Classification]
-        D1 --> F1[Combined Results]
-        E1 --> F1
-    end
-    
-    subgraph "Phase 2: Generation (GeminiGraphGenerator)"
-        F1 --> G2[Gemini 2.5 Pro Analysis]
-        G2 --> H2[Visual Reasoning]
-        H2 --> I2[Node & Relationship Extraction]
-        I2 --> J2[JSON Parsing & Validation]
-    end
-    
-    subgraph "Phase 3: Export (KnowledgeGraphExporter)"
-        J2 --> K3[GraphNode/GraphRelationship Objects]
-        K3 --> L3[CSV File Generation]
-        K3 --> M3[Neo4j Database Storage]
-        L3 --> N3[nodes.csv + relationships.csv]
-        M3 --> O3[Labeled Graph Database]
-    end
-    
-    style A1 fill:#e1f5fe
-    style G2 fill:#f3e5f5
-    style N3 fill:#e8f5e8
-    style O3 fill:#e8f5e8
-```
-
-**Key Features:**
-- **NetworkGraphOCR**: Google Cloud Vision with text categorization
-- **ShapeDetector**: OpenCV-based geometric shape detection
-- **GeminiGraphGenerator**: Gemini 2.5 Pro visual analysis
-- **JSON Utilities**: Robust parsing with fallback strategies
-- **KnowledgeGraphPipeline**: Complete orchestration class
-
-### 2. Embeddings System
-
-The `embeddings` module provides semantic understanding and vector search capabilities:
-
-```mermaid
-graph TB
-    subgraph "Core Components"
-        A2[Neo4j Graph Data] --> B2[EmbeddingManager]
-        B2 --> C2[EmbeddingEncoder]
-        C2 --> D2[Sentence Transformers Model]
-    end
-    
-    subgraph "Embedding Generation"
-        D2 --> E2[Node Text Encoding]
-        E2 --> F2[Vector Embeddings]
-        F2 --> G2[Neo4j Storage]
-    end
-    
-    subgraph "Advanced Features"
-        H2[HybridManager] --> I2[Vector Stores]
-        I2 --> J2[ChromaDB Backend]
-        H2 --> K2[Chunking Support]
-        K2 --> L2[HybridChunker]
-    end
-    
-    subgraph "CLI Interface"
-        M2[embeddings/cli.py] --> N2[Add Embeddings]
-        N2 --> O2[List Diagrams]
-        O2 --> P2[Status Check]
-    end
-    
-    style C2 fill:#fff3e0
-    style G2 fill:#e8f5e8
-    style J2 fill:#f3e5f5
-    style N2 fill:#e1f5fe
-```
-
-**Key Features:**
-- **EmbeddingManager**: Direct Neo4j embedding integration
-- **EmbeddingEncoder**: Sentence Transformers wrapper
-- **Advanced Vector Stores**: ChromaDB with base store abstraction
-- **Document Chunking**: HybridChunker for large content
-- **CLI Tools**: Command-line embedding management
-
-### 3. GraphRAG System
-
-The `graph_rag` module provides intelligent retrieval and reasoning over knowledge graphs:
-
-```mermaid
-graph TB
-    subgraph "Database Layer"
-        A3[Neo4jConnection] --> B3[DataAccess]
-        B3 --> C3[QueryExecutor]
-        C3 --> D3[SchemaExtractor]
-    end
-    
-    subgraph "Retrieval Engine"
-        E3[TwoPhaseRetriever] --> F3[CypherGenerator]
-        F3 --> G3[Neo4j Queries]
-        E3 --> H3[Vector Search]
-        H3 --> I3[Embedding Cache]
-    end
-    
-    subgraph "Search Components"
-        J3[VectorSearch] --> K3[Similarity Matching]
-        J3 --> L3[EmbeddingCache]
-        L3 --> M3[Result Caching]
-    end
-    
-    subgraph "Visualization"
-        N3[VisualizationFactory] --> O3[NetworkXVisualizer]
-        N3 --> P3[GraphvizVisualizer]
-        O3 --> Q3[Static Layouts]
-        P3 --> R3[Publication Quality]
-    end
-    
-    subgraph "Client Interface"
-        S3[GraphRAG Client] --> T3[Search & Visualize]
-        T3 --> U3[Gemini Integration]
-        U3 --> V3[Explanation Generation]
-    end
-    
-    style F3 fill:#e3f2fd
-    style H3 fill:#fff3e0
-    style L3 fill:#f3e5f5
-    style T3 fill:#e8f5e8
-```
-
-**Key Features:**
-- **Neo4j Integration**: Complete database abstraction layer
-- **Two-Phase Retrieval**: Structural + semantic search combination
-- **Cypher Generation**: Dynamic query construction
-- **Vector Search**: Embedding-based similarity matching
-- **Visualization Factory**: NetworkX and Graphviz backends
-- **Gemini Integration**: AI-powered explanations and responses
 
 ## 🔧 Usage
 
-### Command Line Interface
+### API Server
 
-#### Main CLI (Orchestration)
 ```bash
-# Complete automated workflow
-python cli.py quickstart image.png diagram_id "query"
+# Start the server
+python api_server.py
 
-# Advanced processing with visualization
-python cli.py process-and-search image.png diagram_id "query" --visualize --explain
+# Access API docs
+# http://localhost:8000/docs
 ```
 
-#### Specialized Module CLIs
+**Public Endpoints:**
+- `POST /chat` - Search existing diagrams
+- `GET /diagrams` - List available diagrams
+
+**Admin Endpoints:**
+- `POST /admin/upload-diagram` - Process new diagrams
+- `DELETE /admin/diagrams/{diagram_id}` - Delete diagrams
+
+### Command Line Interface
+
 ```bash
-# Diagram processing
-python -m diagram_processing process image.png diagram_id
+# Complete workflow
+python cli.py quickstart image.png diagram_001 "find load balancers"
 
-# GraphRAG operations
-python -m graph_rag search "find load balancers" diagram_id
-python -m graph_rag visualize "show topology" diagram_id --backend graphviz
+# Process only
+python -m diagram_processing process image.png diagram_001
 
-# Embeddings management
-python -m embeddings add diagram_id
+# Search only
+python -m graph_rag search "find servers" diagram_001
+
+# Add embeddings
+python -m embeddings add diagram_001
 ```
 
 ### Python API
 
-#### Quick Processing
 ```python
-from diagram_processing import process_diagram
+from client import NetBot
 
-# Process single diagram
-result = process_diagram("image.png", "diagram_001")
-print(f"Found {len(result.nodes)} nodes and {len(result.relationships)} relationships")
-```
+# Initialize client
+netbot = NetBot()
 
-#### Full GraphRAG System
-```python
-from graph_rag import GraphRAG
-
-# Initialize system
-rag = GraphRAG()
-
-# Process and add embeddings
-result = rag.process_diagram("image.png", "diagram_001")
-rag.add_embeddings("diagram_001")
-
-# Semantic search
-results = rag.search(
-    query="Find all load balancers and their connections",
-    diagram_id="diagram_001"
+# Complete workflow
+results = netbot.quickstart(
+    image_path="data/examples/network_diagram.png",
+    query="find load balancers"
 )
 
-# Visualize results
-rag.visualize(results, "results.html")
-rag.close()
+# Step-by-step
+netbot.process_diagram("image.png", "diagram_001")
+netbot.add_embeddings("diagram_001")
+results = netbot.search("find servers", "diagram_001")
 ```
+
+## 🎯 Key Components
+
+### 1. Diagram Processing Pipeline
+
+**3-Phase Process:**
+1. **Phase 1**: OCR & Preprocessing (Google Cloud Vision + OpenCV)
+2. **Phase 2**: Relationship Generation (Gemini 2.5 Pro)
+3. **Phase 3**: Export & Storage (CSV + Neo4j)
+
+### 2. GraphRAG System
+
+**Features:**
+- Two-phase retrieval (vector + graph search)
+- Semantic embeddings with Sentence Transformers
+- Query result caching
+- AI-powered explanations
+
+### 3. Visualization
+
+**GraphViz Integration:**
+- High-quality static visualizations
+- Multiple layout algorithms (dot, neato, circo, etc.)
+- Publication-ready output formats
+
+### 4. API Server
+
+**FastAPI Features:**
+- Role-based access control
+- JWT authentication for admin endpoints
+- Comprehensive error handling
+- CORS support
 
 ## 📊 Output Structure
 
@@ -320,78 +209,58 @@ data/processed/
 │   └── pipeline_metadata.json  # Processing metadata
 ```
 
-## 🎯 Key Features
-
-### Diagram Processing
-- **OCR Integration**: Google Cloud Vision API for text extraction
-- **Shape Detection**: OpenCV-based geometric analysis
-- **AI Relationship Extraction**: Gemini 2.5 Pro visual reasoning
-- **Multi-format Export**: CSV, JSON, Neo4j direct storage
-
-### GraphRAG System
-- **Two-Phase Retrieval**: Structural + semantic search
-- **Vector Embeddings**: Sentence Transformers integration
-- **Caching**: Intelligent embedding and query caching
-- **Visualization**: NetworkX, Graphviz backends
-
-### Context Management
-- **Session Handling**: Stateful conversation management
-- **Storage Backends**: In-memory, Redis, MongoDB, PostgreSQL
-- **Query Rewriting**: Intelligent context-aware query enhancement
-- **Analytics**: Usage tracking and performance monitoring
-
 ## 🗂️ Repository Structure
 
 ```
 netbot-v2/
-├── cli.py                      # Main orchestration CLI
+├── api_server.py               # FastAPI REST API
+├── cli.py                      # Main CLI interface
+├── client.py                   # Python client
 ├── diagram_processing/         # Core processing pipeline
-│   ├── pipeline/               # 3-phase processing
-│   ├── models/                 # Data models
-│   └── utils/                  # OCR, shape detection, JSON parsing
 ├── graph_rag/                  # GraphRAG system
-│   ├── retrieval/              # Two-phase retrieval
-│   ├── search/                 # Vector search & caching
-│   └── visualization/          # Graph visualization
 ├── embeddings/                 # Embedding management
-│   ├── advanced/               # Hybrid RAG features
-│   └── vector_stores/          # Vector database support
 ├── context_manager/            # Session management
-│   ├── core/                   # Processing components
-│   ├── storage/                # Storage backends
-│   └── utils/                  # Analytics & maintenance
-└── docs/                       # Architecture & guides
+├── models/                     # Data models
+├── data/                       # Examples & processed results
+├── docs/                       # Documentation
+└── requirements.txt            # Dependencies
 ```
 
 ## 🔧 Dependencies
 
 ### Core Requirements
-- **Neo4j** - Graph database storage
-- **Google Gemini API** - Visual reasoning and relationship extraction
-- **Sentence Transformers** - Semantic embeddings
-- **OpenCV** - Image processing and shape detection
-- **Pillow** - Image manipulation
+- **Neo4j** (5.13.0+) - Graph database
+- **Google Gemini API** (0.8.5+) - AI reasoning
+- **Sentence Transformers** (3.0.0+) - Embeddings
+- **GraphViz** - Visualization
+- **FastAPI** - API server
+- **OpenCV** - Image processing
 
-### Optional Features
-- **Google Cloud Vision** - Advanced OCR capabilities
-- **ChromaDB** - Vector storage for semantic search
-- **Redis/MongoDB/PostgreSQL** - External storage backends
-- **Graphviz** - Advanced graph visualization
+### Optional
+- **Google Cloud Vision** - Advanced OCR
+- **ChromaDB** - Vector storage
+- **APOC** - Neo4j procedures (for performance)
+
+## 🚀 Performance Notes
+
+- **Simplified Architecture**: Removed complex modular structure for better maintainability
+- **No Timing Overhead**: Clean query execution without performance monitoring
+- **GraphViz Only**: Removed NetworkX/Matplotlib dependencies
+- **Direct Dependencies**: Eliminated unnecessary abstraction layers
 
 ## 📖 Documentation
 
-- **Architecture Guides**: `docs/architecture/` - Detailed system design
-- **Examples**: `docs/examples/` - Usage examples and patterns
-- **API Reference**: Module docstrings and type hints
+- **Architecture Guides**: `docs/architecture/` - System design documents
+- **Examples**: `data/examples/` - Sample network diagrams
+- **API Docs**: Available at `/docs` when running the server
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Install development dependencies: `pip install -e ".[dev]"`
-4. Run tests: `pytest`
-5. Format code: `black . && isort .`
-6. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## 📄 License
 
@@ -399,11 +268,12 @@ MIT License - see LICENSE file for details.
 
 ## 🙏 Acknowledgments
 
-- Built with Google Gemini 2.5 Pro for visual AI reasoning
-- Powered by Neo4j for graph storage and querying
-- Uses Sentence Transformers for semantic embeddings
-- Visualization powered by NetworkX and Graphviz
+- **Google Gemini 2.5 Pro** - Visual AI reasoning
+- **Neo4j** - Graph database platform  
+- **Sentence Transformers** - Semantic embeddings
+- **GraphViz** - Graph visualization
+- **FastAPI** - Modern web framework
 
 ---
 
-**NetBot v2** - Transforming visual diagrams into intelligent knowledge graphs 🚀
+**NetBot v2** - Clean, focused, and powerful diagram-to-knowledge-graph transformation 🚀
